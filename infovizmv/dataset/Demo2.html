@@ -1,0 +1,117 @@
+<html>
+<header>
+  <title>Movie Name and Poster</title>
+  <script type="text/javascript" src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+  <script src="http://curran.github.io/model/cdn/model-v0.2.4.js"></script>
+  <link rel="stylesheet" href="style.css">
+</header>
+
+<body>
+    <form>
+            <input type="text" id="id" value=""/>
+            <input type="button" id="btn" value="GO"/>
+    </form>
+
+    <p lang="en-us"><strong><span id='name'></span></strong></p>
+    <div id="container"></div>
+    
+    <script>
+        
+        var margin = { top: 50, right: 50, bottom: 50, left: 50 }
+	        h = 900 - margin.top - margin.bottom
+	        w = 1000 - margin.left - margin.right
+
+        d3.csv("links.csv", function(error, data){
+            if (error) throw error;
+
+            var movieid = {}
+            data.forEach(function(d) {
+                var imdb = d.imdbId
+                    mv = d.movieId
+                movieid[mv] = imdb
+            })     
+            
+            d3.csv("movies.csv", function(error, data){
+                if (error) throw error;
+                
+                var movie = {}
+                data.forEach(function(d) {
+                    var id = d.movieId
+                        name = d.title
+                    movie[id] = name
+                })
+                
+                d3.csv('ratings.csv', function(error, data) {
+                    if (error) throw error;
+
+                    var rating = {}
+
+                    for (var i=1; i < 193610; i++) {
+                        rating[i] = []
+                    }
+
+                    data.forEach(function(d) {
+                        var id = d.movieId
+                            rate = d.rating
+                            t = d.timestamp
+                            time = new Date('1970-1-1')
+                            time.setSeconds(t)
+                        rating[id].push({'time': time, 'rate': rate, 'id': d.userId})
+                    })
+
+                    document.getElementById('btn').onclick = function() {
+
+                        var val = document.getElementById('id').value;
+                            imdb = movieid[val]
+                            url = 'http://img.omdbapi.com/?i=tt' + imdb + '&apikey=e1031f0d'
+                            name = movie[val]
+                        document.getElementById('name').innerHTML = name
+                        t_rate = rating[val]
+
+                        }
+                    })
+                })
+            })
+
+        function ScatterPlot(data, div) {
+            var svg = d3.select("div").append("svg").style("position", "absolute"),
+                width = w,
+                height = h,
+                selected;
+
+            var x = d3.scaleTime()
+                        .domain([new Date('1996-1-1'), new Date('2018-10-31')])
+                        .range([0,width])
+                        .nice();
+
+                y = d3.scaleLinear().range([height,0]).domain([0, 5]).nice();
+
+        var xAxis = d3.axisBottom(x)
+                .tickSize(2, 0)
+                .tickFormat(d3.timeFormat("%Y-%m"));
+
+            yAxis = d3.axisLeft(y)
+                    .tickFormat(d3.format('+.2'))
+            
+            var quadtree = d3.quadtree()
+                            .extent([[-1, -1], [width, height]])
+                            .addAll(data);
+
+            var brush = d3.brush()
+                .on("brush", brushed);
+
+            svg.selectAll(".node")
+                .data(nodes(quadtree))
+                .enter().append("rect")
+                    .attr("class", "node")
+                    .attr("x", function(d) { return d.x0; })
+                    .attr("y", function(d) { return d.y0; })
+                    .attr("width", function(d) { return d.y1 - d.y0; })
+                    .attr("height", function(d) { return d.x1 - d.x0; });
+
+
+        }
+
+    </script>
+
+</body>

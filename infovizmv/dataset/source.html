@@ -1,0 +1,516 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <!-- <link rel="stylesheet" href="styles.css"> -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js"></script>
+
+    <!-- A functional reactive model library found online. -->
+    <script src="http://curran.github.io/model/cdn/model-v0.2.4.js"></script>
+
+    <style>
+
+      #container {
+        position: fixed;
+        top: 220px;
+        bottom: 30px;
+        left: 30px;
+        right: 30px;
+      }
+
+        body {
+            background-color: lightyellow;
+            font: 10px Arial; /*position: relative;
+            width: 960px;*/
+        }
+
+        h1 {
+            color: black;
+            text-align: center;
+        }
+
+        p {
+            font-family: verdana;
+            font-size: 15px;
+        }
+
+        ol {
+            font-family: verdana;
+            font-size: 20px;
+        }
+
+      .axis path,
+      .axis line {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+      }
+
+      .dot {
+        fill: black;
+      }
+
+      .dot.selected {
+        fill: red;
+      }
+
+      .brush .extent {
+        stroke: gray;
+        fill-opacity: .125;
+        shape-rendering: crispEdges;
+      }
+    </style>
+
+  </head>
+  <body>
+    <form>
+        <input type="text" id="id" value=""/>
+        <input type="button" id="btn" value="GO"/>
+    </form>
+    <div id="photo">
+        <p lang="en-us"><strong><span id='name'></span></strong></p>
+        <p lang="en-us"><span id='information'></span></p>
+    </div>
+    
+    <div id="container"></div>
+    
+    <script>
+
+        var h = 400
+	        w = 500
+
+function BarChart (container) {
+    var defaults = {
+            margin: {
+            top: 50,
+            right: 20,
+            bottom: 30,
+            left: 40
+            },
+            yAxisNumTicks: 10,
+            yAxisTickFormat: ""
+        },
+        model = Model(defaults),
+        xAxis = d3.svg.axis().orient("bottom"),
+        yAxis = d3.svg.axis().orient("left")
+        svg = d3.select(container).append('svg')
+
+            // Use absolute positioning on the SVG element 
+            // so that CSS can be used to position the div later
+            // according to the model `box.x` and `box.y` properties.
+            .style('position', 'absolute'),
+
+        g = svg.append("g"),
+        xAxisG = g.append("g").attr("class", "x axis"),
+        yAxisG = g.append("g").attr("class", "y axis"),
+        yAxisText = yAxisG.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 6)
+            .attr("dy", ".71em")
+            .style("text-anchor", "end");
+
+    model.when(["box", "margin"], function (box, margin) {
+        model.width = box.width - margin.left - margin.right,
+        model.height = box.height - margin.top - margin.bottom;
+    });
+    model.when("margin", function (margin) {
+        g.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    });
+
+    // Adjust Y axis tick mark parameters.
+
+    model.when(['yAxisNumTicks', 'yAxisTickFormat'], function (count, format) {
+        yAxis.ticks(count, format);
+    });
+
+    // Respond to changes in size and offset.
+    model.when("box", function (box) {
+
+        // Resize the svg element that contains the visualization.
+        svg.attr("width", box.width).attr("height", box.height);
+
+        // Set the CSS `left` and `top` properties
+        // to move the SVG element to `(box.x, box.y)`
+        // relative to the container div to apply the offset.
+        svg
+        .style('left', box.x + 'px')
+        .style('top', box.y + 'px');
+    });
+
+    model.when("height", function (height) {
+        xAxisG.attr("transform", "translate(0," + height + ")");
+    });
+
+    model.when(["data", "xAttribute", "width"], function (data, xAttribute, width) {
+        model.xScale = d3.scale.ordinal()
+        .rangeRoundBands([0, width], .1)
+        .domain(data.map(function(d) { return d[xAttribute]; }));
+    });
+
+    model.when(["data", "yAttribute", "height"], function (data, yAttribute, height) {
+        model.yScale = d3.scale.linear()
+        .range([height, 0])
+        .domain([0, d3.max(data, function(d) { return d[yAttribute]; })]);
+    });
+
+    model.when(["xScale"], function (xScale) {
+        xAxis.scale(xScale)
+        xAxisG.call(xAxis);
+    });
+
+    model.when(["yScale"], function (yScale) {
+        yAxis.scale(yScale)
+        yAxisG.call(yAxis);
+    });
+
+    model.when("yAxisLabel", yAxisText.text, yAxisText);
+
+    model.when(["data", "xAttribute", "yAttribute", "xScale", "yScale", "height"],
+        function (data, xAttribute, yAttribute, xScale, yScale, height) {
+        var bars = g.selectAll(".bar").data(data);
+
+        bars.enter().append("rect").attr("class", "bar");
+
+        bars
+        .attr("x", function(d) { return xScale(d[xAttribute]); })
+        .attr("width", xScale.rangeBand())
+        .attr("y", function(d) { return yScale(d[yAttribute]); })
+        .attr("height", function(d) { return height - yScale(d[yAttribute]); });
+
+        bars.exit().remove();
+    });
+
+    return model;
+}
+
+function ScatterPlot (div){
+
+    var x = d3.time.scale().domain([new Date('1996-1-1'), new Date('2018-10-31')]).range([0,w]).nice(),
+        y = d3.scale.linear().range([h,0]).domain([0, 5.5]).nice(),
+        xAxis = d3.svg.axis().scale(x).orient('bottom'),
+        yAxis = d3.svg.axis().scale(y).orient('left'),
+
+        // Use absolute positioning so that CSS can be used
+        // to position the div according to the model.
+
+        svg = d3.select(div).append('svg').style('position', 'absolute'),
+        g = svg.append('g'),
+        xAxisG = g.append('g').attr('class', 'x axis'),
+        yAxisG = g.append('g').attr('class', 'y axis'),
+        xAxisLabel = xAxisG.append('text')
+            .attr('class', 'label')
+            .attr('y', -6)
+            .style('text-anchor', 'end'),
+        yAxisLabel = yAxisG.append('text')
+            .attr('class', 'label')
+            .attr('transform', 'rotate(-90)')
+            .attr('y', 6)
+            .attr('dy', '.71em')
+            .style('text-anchor', 'end'),
+
+        dotsG = g.append('g'),
+        brushG = g.append('g')
+            .attr('class', 'brush'),
+        brush = d3.svg.brush()
+            .on('brush', brushed),
+        dots,
+        quadtree,
+        model = Model();
+
+    model.when('xLabel', xAxisLabel.text, xAxisLabel);
+    model.when('yLabel', yAxisLabel.text, yAxisLabel);
+
+
+    model.when('margin', function (margin) {
+        g.attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+    });
+
+    model.when('box', function (box) {
+        svg.attr('width', box.width)
+        .attr('height', box.height);
+
+        svg
+        .style('left', box.x + 'px')
+        .style('top', box.y + 'px')
+    });
+
+    model.when(['box', 'margin'], function (box, margin) {
+        model.width = box.width - margin.left - margin.right;
+        model.height = box.height - margin.top - margin.bottom;
+    });
+
+    model.when('width', function (width) {
+        xAxisLabel.attr('x', width);
+    });
+
+    model.when('height', function (height) {
+        xAxisG.attr('transform', 'translate(0,' + height + ')');
+    });
+
+    model.when(['width', 'height'], function (width, height) {
+        brush.x(d3.scale.identity().domain([0, width]));
+        brush.y(d3.scale.identity().domain([0, height]));
+        brushG
+        .call(brush)
+        .call(brush.event);
+    });
+
+    model.when(['width', 'height', 'data', 'xField', 'yField'], function (width, height, data, xField, yField) {
+
+        // Updated the scales
+        x.domain(d3.extent(data, function(d) { return d[xField]; })).nice();
+        y.domain([0, 5.5]).nice();
+
+        x.range([0, width]);
+        y.range([height, 0]);
+
+        // update the quadtree
+        quadtree = d3.geom.quadtree()
+        .x(function(d) { return x(d[xField]); })
+        .y(function(d) { return y(d[yField]); })
+        (data);
+
+        // update the axes
+        xAxisG.call(xAxis);
+        yAxisG.call(yAxis);
+
+        // Plot the data as dots
+        dots = dotsG.selectAll('.dot').data(data);
+        dots.enter().append('circle')
+        .attr('class', 'dot')
+        .attr('r', 3);
+        dots
+        .attr('cx', function(d) { return x(d[xField]); })
+        .attr('cy', function(d) { return y(d[yField]); });
+        dots.exit().remove();
+    });
+    return model;
+
+    function brushed() {
+        var e = brush.extent(), selectedData;
+        if(dots) {
+        dots.each(function(d) { d.selected = false; });
+        selectedData = search(e[0][0], e[0][1], e[1][0], e[1][1]);
+        dots.classed('selected', function(d) { return d.selected; });
+        }
+        model.selectedData = brush.empty() ? model.data : selectedData;
+    }
+
+    // Find the nodes within the specified rectangle.
+    function search(x0, y0, x3, y3) {
+        var selectedData = [];
+        quadtree.visit(function(node, x1, y1, x2, y2) {
+            var d = node.point, x, y;
+            if (d) {
+                x = node.x;
+                y = node.y;
+                d.visited = true;
+                if(x >= x0 && x < x3 && y >= y0 && y < y3){
+                d.selected = true;
+                selectedData.push(d);
+                }
+            }
+            return x1 >= x3 || y1 >= y3 || x2 < x0 || y2 < y0;
+        });
+        return selectedData;
+    }
+}
+    
+// The main program that assembles the linked views.
+
+function main(){
+    var QUERY = false;
+
+    // Grab the container div from the DOM.
+    var div = document.getElementById('container'),
+
+        // Add both visualizations to the same div.
+        // Each will create its own SVG element.
+        scatterPlot = ScatterPlot(div),
+        barChart = BarChart(div);
+
+    // Configure the scatter plot to use the rating data.
+    scatterPlot.set({
+        xField: 'time',
+        yField: 'rate',
+        xLabel: 'time',
+        yLabel: 'rate',
+        margin: { 'top': 100, 'right': 20, 'bottom': 30, 'left': 40 }
+    });
+
+    // Configure the bar chart to use the aggregated rating data.
+    barChart.set({
+        xAttribute: 'rate',
+        yAttribute: 'count',
+        yAxisLabel: 'number of rate',
+        margin: { 'top': 70, 'right': 20, 'bottom': 30, 'left': 40 }
+    });
+
+    // Compute the aggregated rating data in response to brushing
+    // in the scatter plot, and pass it into the bar chart.
+    scatterPlot.when('selectedData', function (scatterData) {
+        var rateCounts = {};
+
+        // Aggregate scatter plot data by counting 
+        // the number of rating for each rate.
+        scatterData.forEach(function (d) {
+        if(!rateCounts[d.rate]){
+            rateCounts[d.rate] = 0;
+        }
+        rateCounts[d.rate]++;
+        });
+
+        // Flatten the object containing rating counts into an array.
+        // Update the bar chart with the aggregated data.
+        barChart.data = Object.keys(rateCounts).map(function (rate) {
+        return {
+            rate: rate,
+            count: rateCounts[rate]
+        };
+        });
+    });
+
+    // Load the data.
+    d3.csv("links.csv", function(error, data){
+        if (error) throw error;
+
+        var movieid = {}
+        data.forEach(function(d) {
+            var imdb = d.imdbId
+                mv = d.movieId
+            movieid[mv] = imdb
+        })     
+        
+        d3.csv("movies.csv", function(error, data){
+            if (error) throw error;
+            
+            var movie = {}
+            data.forEach(function(d) {
+                var id = d.movieId
+                    name = d.title
+                    genres = d.genres
+                movie[id] = {"name": name, "genres": genres}
+            })
+            
+                d3.csv('ratings.csv', function(error, data) {
+                    if (error) throw error;
+
+                    var rating = {}
+
+                    for (var i=1; i < 193610; i++) {
+                        rating[i] = []
+                    }
+
+                    data.forEach(function(d) {
+                        var id = d.movieId
+                            rate = d.rating
+                            t = d.timestamp
+                            time = new Date('1970-1-1')
+                            time.setSeconds(t)
+                        rating[id].push({'time': time, 'rate': rate, 'id': d.userId})
+                    })
+
+                var val = getQueryVariable('i');
+                        imdb = movieid[val]
+                        url = 'http://img.omdbapi.com/?i=tt' + imdb + '&apikey=e1031f0d'
+                        name = movie[val].name
+                        information = 'Genres: ' + movie[val].genres
+
+                    document.getElementById('name').innerHTML = name
+                    document.getElementById('information').innerHTML = information
+
+                    t_rate = rating[val]
+                        
+                        img = document.createElement('img')
+                    img.url = url;
+                        
+                    var slot = document.getElementById('photo')
+                        pic = d3.select(slot).append('svg').style('position', 'absolute')
+
+                    pic.append("svg:image")
+                            .attr('x', -15)
+                            .attr('y', -15)
+                            .attr('width', 200)
+                            .attr('height', 200)
+                            .attr("xlink:href", url)
+                        
+                        setSizes();
+                        scatterPlot.data = t_rate; 
+
+                    document.getElementById('btn').onclick = function() {
+
+                        var val = document.getElementById('id').value;
+                            imdb = movieid[val]
+                            url = 'http://img.omdbapi.com/?i=tt' + imdb + '&apikey=e1031f0d'
+                            name = movie[val].name
+                            information = 'Genres: ' + movie[val].genres
+
+
+                        document.getElementById('name').innerHTML = name
+                        document.getElementById('information').innerHTML = information
+
+                        t_rate = rating[val]
+                        
+                            img = document.createElement('img')
+                        img.url = url;
+                        
+                        var slot = document.getElementById('photo')
+                            pic = d3.select(slot).append('svg').style('position', 'absolute')
+
+                        pic.append("svg:image")
+                                .attr('x', -15)
+                                .attr('y', -15)
+                                .attr('width', 120)
+                                .attr('height', 150)
+                                .attr("xlink:href", url)
+                        
+                        setSizes();
+                        scatterPlot.data = t_rate;
+                        }
+                    })
+                /* }); */
+            })
+        });
+
+    // Sets the `box` property on each visualization
+    // to arrange them within the container div.
+    function setSizes(){
+    
+        // Put the scatter plot on the left.
+        scatterPlot.box = {
+        x: 0,
+        y: 0,
+        width: div.clientWidth / 2,
+        height: div.clientHeight
+        };
+
+        // Put the bar chart on the right.
+        barChart.box = {
+        x: div.clientWidth / 2,
+        y: 0,
+        width: div.clientWidth / 2,
+        height: div.clientHeight
+        };
+    }
+
+    function getQueryVariable(variable) {
+        QUERY = true;
+        var query = window.location.search.substring(1);
+        var vars = query.split('&');
+        for (var i = 0; i < vars.length; i++){
+            var pair = vars[i].split('=')
+            if (decodeURIComponent(pair[0]) == variable) {
+            return decodeURIComponent(pair[1]);
+
+            }
+            console.log("Query variable %s not found" ,variable);
+        }
+        }
+    test_var = getQueryVariable('i');
+    console.log("this is test var ", test_var);
+    }
+    main();
+
+    </script>
+  </body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+    <!DOCTYPE html>
+    <head>
+      <meta charset="utf-8">
+      <script src="https://d3js.org/d3.v4.min.js"></script>
+      <style>
+        body { margin:0;position:fixed;top:0;right:0;bottom:0;left:0; }
+        div.tooltip {
+              position: absolute;
+              text-align: center;
+              width: 60px;					
+              height: 100px;					
+              padding: 2px;				
+              font: 12px sans-serif;		
+              background: lightsteelblue;	
+              border: 0px;		
+              border-radius: 8px;			
+              pointer-events: none;
+        }
+
+      </style>
+    </head>
+    
+    <body>
+      <script>
+
+        const width = 960;
+        const height = 500;
+        const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+        const innerWidth = width - margin.left - margin.right;
+        const innerHeight = height - margin.top - margin.bottom;
+        
+        
+        var div = d3.select("body").append("div")
+            .attr("class", "tooltip")
+            .style("opacity", 0);
+
+        d3.json("maindata.json", function(error, data) {
+          if (error) throw error;
+
+          const svg = d3.select("body").append("svg")
+                        .attr("width", width)
+                        .attr("height", height)
+                        .call(d3.zoom().on('zoom', onZoom));
+        
+          svg.append('defs')
+            .append('clipPath')
+            .attr('id', 'clip-path')
+            .append('rect')
+            .attr('x', 0)
+            .attr('y', 0)
+            .attr('width', innerWidth)
+            .attr('height', innerHeight);
+        
+          const container = svg
+            .append('g')
+            .attr('transform', `translate(${margin.left}, ${margin.top})`);
+        
+          const xScale = d3.scaleLinear()
+                            .range([0, innerWidth])
+                            .domain(d3.extent(data.map(d => +d.year)));
+          const xAxis = d3.axisBottom(xScale)
+          const xAxisGrouping = container
+            .append('g')
+            .attr('class', 'axis axis--x')
+            .call(xAxis)
+            .attr('transform', `translate(0 ${innerHeight})`);
+          
+          data.forEach(function(d) {
+            d.avgrate = +d.avgrate;
+          });
+          const yScale = d3.scaleLinear()
+            .range([innerHeight, 0])
+            .domain(d3.extent(data, function(d) {return d.avgrate; })).nice();
+          const yAxis = d3.axisLeft(yScale);
+          const yAxisGrouping = container
+            .append('g')
+            .attr('class', 'axis axis--y')
+            .call(yAxis);
+          
+          
+          // Create a colour scheme based on the data types
+          const colourScheme = d3.scaleOrdinal()
+            .domain(data.map(d => d.genre))
+            .range(d3.schemeCategory20);
+          
+          const nodeContainer = container.append('g')
+          
+          // Create nodes representing the data
+          const nodes = nodeContainer.selectAll('circle').data(data);
+          const nodesPtrList = []
+          nodes
+            .enter()
+            .append('circle')
+            .attr('id', function(d){
+              nodesPtrList.push((this));
+              return d.id;})
+            .attr('cx', d => xScale(d.year))
+            .attr('cy', d => yScale(d.avgrate))
+            .attr('r', 6)
+            .attr("fill-opacity", 1)
+            .attr('fill', d => colourScheme(d.genre))
+            .on("click", movieView)
+            .on("contextmenu", recommendView)
+                .on("mouseover", function (d) {
+                    div.transition()
+                        .duration(500)
+                        .style("opacity", .9);
+                    div.html("<br/>" + d.title + "<br/>" + "id: " + d.id)
+                        .style("left", (d3.event.pageX) + "px")
+                        .style("top", (d3.event.pageY - 28) + "px")
+                    d3.select(this)
+                      .transition()
+                      .duration(200)
+                      .attr('r',20)
+                      .attr('stroke-width',3)
+                })
+                .on("mouseout", function (d) {
+                    d3.select(this)
+                      .transition()
+                      .duration(200)
+                      .attr('r', 4)
+                      .attr("stroke-width", 1);
+                    div.transition()
+                        .duration(50)
+                        .style("opacity", 0)
+                });
+          //nodes.exit().remove();
+
+          var nodesEnter = container.selectAll("circle");
+
+          function onZoom() {
+            const xScaleNew = d3.event.transform.rescaleX(xScale);
+            xAxisGrouping.call(xAxis.scale(xScaleNew));
+            const yScaleNew = d3.event.transform.rescaleY(yScale);
+            yAxisGrouping.call(yAxis.scale(yScaleNew));
+      
+            container.selectAll('circle').attr('cx', d => xScaleNew(d.year))
+                                         .attr('cy', d => yScaleNew(d.avgrate));
+          }
+
+          var LABELFIX = false;
+          var legend = svg.selectAll(".legend")
+                                .data(colourScheme.domain())
+                                .enter()
+                                .append("g")
+                                .attr("class", "legend")
+                                .attr("size", 10, 10)
+                                .attr("transform", function(d,i){
+                                    return "translate(0," + (i+1)*30 + ")";
+                                })
+                                .on("click", function(d){
+
+                                  if (LABELFIX === true){
+                                      d3.selectAll("circle")
+                                        .transition()
+                                        .duration(1000)
+                                        .attr("fill-opacity", 1)
+                                      LABELFIX = false;
+                                  }
+                                  else{
+                                    d3.selectAll("circle")
+                                    .transition()
+                                    .duration(1000)
+                                    .attr("fill-opacity", function(n){
+                                        if (d !== n.genre){
+                                            return 0;
+                                        }
+                                        else {
+                                            return 1;
+                                        }
+                                    })
+
+                                    LABELFIX = true;
+
+                                  }
+                                });
+        
+          legend.append("rect")
+                .attr("x", width - 16)
+                .attr("width", 18)
+                .attr("height",18)
+                .style("fill", colourScheme)
+                ;
+          
+          legend.append("text")
+                .attr("x", width - 24)
+                .attr("y",9)
+                .attr("dy", ".35em")
+                .style("text-anchor", "end")
+                .text(function(d){
+                    return d;
+                });
+        
+        })
+
+        function movieView(){
+          window.open("./dataset/source.html" + "?i=" + this.id, "_blank");
+        }
+
+        function recommendView(){
+          window.open("./main_view_final.html" + "?i=" + this.id, "_blank");
+        }
+      </script>
+    </body>
+</html>
